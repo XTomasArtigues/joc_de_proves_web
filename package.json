@@ -1,0 +1,11 @@
+{
+  "name": "joc-de-proves-ptd1",
+  "version": "1.0.0",
+  "description": "Aplicació web de correcció automàtica de scripts (estil Programame) per a les evidències de PTD I, 1r Batxillerat.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "private": true
+}
