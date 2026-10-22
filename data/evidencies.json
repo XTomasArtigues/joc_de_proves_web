@@ -1,0 +1,21 @@
+{
+  "E011": {
+    "codi": "E011",
+    "titol": "Entrada al festival",
+    "enunciat": "Ets a la taquilla d'un festival de música. Preu de l'entrada: 18,50€. Diners que portes: 25€. Edat mínima per entrar sol/a: 16 anys.\n\nEscriu un programa que faci exactament això:\n1. Declara tres variables amb el tipus que correspongui: preuEntrada (18.5), diners (25), edat (16 — fixa-ho així, igual per a tothom).\n2. Calcula amb un operador aritmètic el canvi que et tornarien si pagues amb els diners que portes. Guarda'l a canvi i mostra'l amb console.log.\n3. Escriu una expressió amb un operador relacional que comprovi si edat >= 16. Guarda el resultat a potEntrarSol i mostra'l amb console.log.\n4. Afegeix un comentari d'una línia explicant per què preuEntrada i diners han de ser de tipus number i no string.",
+    "proves": [
+      {
+        "nom": "Calcula bé el canvi (diners - preuEntrada)",
+        "entrada": "",
+        "sortidaEsperada": "6.5",
+        "mode": "conte"
+      },
+      {
+        "nom": "Comprova correctament l'edat mínima (edat >= 16)",
+        "entrada": "",
+        "sortidaEsperada": "true",
+        "mode": "conte"
+      }
+    ]
+  }
+}
