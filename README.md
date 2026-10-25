@@ -127,16 +127,20 @@ Railway o Fly.io, si ja en coneixes alguna):
 2. Puja el contingut d'aquesta carpeta a un repositori de GitHub (si no en
    tens, Render també explica com fer-ho des de la seva pròpia pàgina).
 3. A Render, tria "New +" → "Web Service", connecta el repositori.
-4. Configuració: *Build command* en blanc (no cal, no hi ha dependències),
+4. Configuració: *Build command*: `npm install` (no instal·la res, ja que
+   l'app no té dependències, però Render no deixa aquest camp en blanc),
    *Start command*: `node server.js`.
 5. Un cop desplegat, Render et dona una URL pública (per exemple
    `https://joc-de-proves-ptd1.onrender.com`) — aquesta és la que dones a
    l'alumnat, i `/admin.html` per a tu.
 
-**Avís important sobre aquesta opció**: al pla gratuït d'aquests serveis,
-el disc on es guarden els fitxers de `data/` (evidències, intents, notes)
-**no sempre és permanent** — es pot esborrar quan el servei es reinicia
-(per exemple, després d'un període d'inactivitat). Per no perdre feina:
+**Avís important sobre el pla gratuït**: el disc on es guarden els fitxers
+de `data/` (evidències, intents, notes, comptes) **no és permanent** — es
+pot esborrar quan el servei es reinicia (per exemple, després d'un període
+d'inactivitat, o en cada nou desplegament). Si l'alumnat ha de poder entrar
+des de casa en qualsevol moment sense perdre el que ja tenia fet, cal
+activar un **disc persistent** (secció següent) — en cas contrari, fes
+servir sempre la còpia de seguretat manual:
 - Fes servir el botó **"⬇️ Còpia de seguretat"** del panell d'administració
   sovint, sobretot al final de cada sessió de classe — et descarrega un
   fitxer `.json` amb totes les evidències, jocs de proves, intents, notes
@@ -145,9 +149,40 @@ el disc on es guarden els fitxers de `data/` (evidències, intents, notes)
 - Si mai veus que les dades han desaparegut (per exemple, en tornar un
   altre dia), fes servir **"⬆️ Restaura còpia"** amb l'últim fitxer que et
   vas descarregar.
-- Demana-m'ho si vols que t'ajudi amb els passos concrets de desplegament
-  quan arribi el moment, o si vols una opció amb disc permanent (sol ser
-  de pagament, encara que econòmica).
+
+### Fer que les dades siguin permanents: disc persistent a Render (recomanat)
+
+Perquè l'alumnat pugui treballar des de casa a qualsevol hora sense perdre
+mai res (sense haver de fer còpies de seguretat manuals cada dia), cal
+passar del pla gratuït de Render a un pla de pagament que admeti un
+**"Disk" (disc persistent)** — al voltant de 7-8$/mes pel servei més bàsic,
+més uns 0,25$/mes per 1 GB de disc (molt més que suficient per a les dades
+d'aquesta app). Un cop fet, les dades sobreviuen tant als reinicis per
+inactivitat com als nous desplegaments.
+
+Passos a Render (es fan un sol cop):
+1. Al teu servei, vés a **Settings** i canvia l'"Instance Type" del pla
+   gratuït a un de pagament (el més bàsic ja serveix).
+2. Encara a Settings, busca la secció **"Disks"** → "Add Disk". Posa-li un
+   nom (per exemple `dades`), una mida (1 GB és de sobres) i, el camp
+   important, el **"Mount Path"**: escriu-hi `/var/data`.
+3. Vés a **Environment** (variables d'entorn) i afegeix-ne una de nova:
+   clau `DATA_DIR`, valor `/var/data` (exactament el mateix camí que has
+   posat al "Mount Path" del disc).
+4. Guarda els canvis; Render tornarà a desplegar el servei automàticament.
+
+**No cal tornar a introduir l'evidència d'exemple ni la contrasenya a mà**:
+la primera vegada que l'aplicació arrenca amb el disc nou (buit), ella
+mateixa hi copia l'evidència E011 i la contrasenya d'administració inicial
+que porta el projecte. A partir d'aquí, tot el que es creï o es canviï des
+del panell (noves evidències, comptes de l'alumnat, intents, contrasenyes)
+es queda al disc i ja no es perd mai, encara que Render reinicïi o
+redesplegui el servei.
+
+Demana-m'ho si vols que t'ajudi amb algun d'aquests passos quan arribi el
+moment, o si prefereixes una alternativa gratuïta (una base de dades
+externa gratuïta en lloc del disc de pagament) — és possible, però requereix
+reescriure la part de l'aplicació que desa les dades.
 
 ## Com funciona la nota a les evidències (regles donades per la professora, 2026-10-22)
 
