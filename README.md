@@ -233,6 +233,64 @@ totalment visible per a tu al panell, amb una etiqueta "🙈 amagat a
 l'alumnat", i tot el que l'alumnat ja hi hagués entregat es conserva i
 torna a aparèixer en tornar-lo a mostrar.
 
+## Concursos: competicions per equips (🏆, 2026-10-27)
+
+A banda de les evidències i els reptes individuals, l'aplicació permet
+organitzar **concursos**: competicions de programació per equips, a l'estil
+dels concursos tipus ICPC (el format en què es basa Programa'm). Es gestionen
+des del botó "🏆 Concursos" del panell d'administració.
+
+**Com funciona la puntuació (normativa):**
+
+- Cada **problema** val els punts que tu li assignes en afegir-lo al
+  concurs — no té relació amb la dificultat ni amb la quantitat de codi
+  escrit.
+- La puntuació de l'equip és la **suma dels punts** dels problemes que ha
+  resolt correctament. Guanya l'equip amb més punts, encara que un altre
+  equip hagi trigat menys temps.
+- En cas d'**empat a punts**, guanya l'equip amb menys temps total
+  acumulat.
+- Per cada problema que un equip acaba resolent, es compta el temps des de
+  l'inici del concurs fins a l'entrega correcta, **+ 20 minuts per cada
+  entrega incorrecta anterior** d'aquell mateix problema. Els problemes que
+  l'equip no arriba a resoldre no sumen cap temps de penalització, per
+  molts intents que hi hagi fet.
+- Un cop un equip ha resolt un problema, l'aplicació ja no li deixa tornar
+  a entregar-lo (no té cap efecte en la puntuació).
+- El marcador mostra, per a cada problema resolt, els intents i el temps
+  comptabilitzat amb el format `intents (minuts fins a l'encert+penalització)`
+  — per exemple `3 (25+40)` vol dir 3 intents, 25 minuts fins a l'encert i
+  40 minuts de penalització acumulada (2 intents fallits previs × 20 min).
+  Verd = resolt; verd fosc = el primer equip de tots a resoldre'l; vermell
+  = intentat, encara no resolt; blanc = encara no intentat.
+- **Bonus pel primer a resoldre (opcional, 2026-10-27)**: en crear o editar
+  un concurs pots indicar un "Bonus pel primer a resoldre" (en punts,
+  posa-hi 0 si no en vols cap). L'equip que sigui el primer de tots a
+  resoldre un problema concret suma aquests punts extra, a banda dels
+  punts normals del problema — es marca al marcador amb 🥇. El mateix
+  valor s'aplica a tots els problemes del concurs.
+
+**Com crear-ne un:**
+
+1. Crea un compte per a cada **equip** des de "👤 Alumnat", exactament
+   igual que per a qualsevol alumne/a (usuari + contrasenya); posa-hi el
+   nom de l'equip com a "Nom complet" perquè surti ben identificat al
+   marcador.
+2. Des de "🏆 Concursos", crea el concurs indicant un identificador, un
+   nom, la **data i hora d'inici**, la **durada en minuts** i, si vols,
+   el **bonus pel primer a resoldre**. Mentre no ha
+   arribat la data d'inici, els equips no en veuen els problemes; un cop
+   passada la durada, ja no es poden fer més entregues (però el marcador
+   final es continua podent consultar).
+3. Dins del concurs, marca a "Equips participants" quins comptes hi
+   participen — **només ells** podran accedir-hi (la resta de l'alumnat ni
+   el veu a la seva llista de concursos).
+4. Afegeix els problemes (codi, títol, enunciat i punts) i, per a
+   cadascun, el seu propi joc de proves — igual que amb les evidències.
+
+L'alumnat hi accedeix des de la targeta "🏆 Concursos" de la seva pantalla
+principal, que només els mostra els concursos on el seu compte hi participa.
+
 ## Com es comprova cada prova
 
 Cada prova del joc consisteix en: executar l'script de l'alumnat (donant-li
@@ -274,16 +332,19 @@ lib/
   store.js            — llegeix/escriu les dades (evidencies.json, estat/*.json, alumnes.json, config.json)
   corrector.js         — executa l'script de l'alumnat i comprova les proves
   nota.js              — fórmula de qualificació (intents, bonus de primer/a)
+  concurs.js            — normativa i marcador dels concursos per equips (punts, penalitzacions)
   credencials.js        — hash de contrasenyes de l'alumnat (scrypt + sal, sense dependències)
 public/
-  index.html, app.js    — vista de l'alumnat (login, llista, entrega, canvi de contrasenya)
-  admin.html, admin.js  — panell d'administració (evidències, reptes, alumnat)
+  index.html, app.js    — vista de l'alumnat (login, llista, entrega, canvi de contrasenya, concursos)
+  admin.html, admin.js  — panell d'administració (evidències, reptes, alumnat, concursos)
   style.css             — estils compartits
 data/
   evidencies.json      — totes les evidències i els seus jocs de proves (editable des de l'admin)
   alumnes.json          — comptes de l'alumnat: usuari, nom, i la contrasenya ja xifrada (mai en clar)
   config.json           — contrasenya d'administració i port
   estat/<CODI>.json     — intents, notes i rànquing de cada evidència (es crea sol)
+  concursos.json         — tots els concursos (problemes, punts, equips participants)
+  estat-concursos/<ID>.json — intents de cada equip a cada problema d'un concurs (es crea sol)
   tmp/                  — fitxers temporals dels scripts mentre s'executen (es netegen sols)
 ```
 
@@ -318,11 +379,22 @@ debò, perquè és l'única "base de dades" de l'eina.
   es guarden al navegador amb `sessionStorage`, que es tanca sol en
   tancar la pestanya — important perquè els ordinadors de l'aula solen ser
   compartits entre grups diferents durant el dia.
-- El **rànquing de cada evidència/repte** (la taula amb noms i notes de
-  tota la classe) només es pot veure si has iniciat sessió com a
-  alumne/a — no és visible per a ningú que no tingui un compte, important
-  perquè un cop l'aplicació estigui penjada a internet amb una URL pública
-  no n'hi hagi prou amb l'enllaç per veure les notes de tothom.
+- El **rànquing de cada repte** (la taula amb noms i resultats de tota la
+  classe) només es pot veure si has iniciat sessió com a alumne/a — no és
+  visible per a ningú que no tingui un compte, important perquè un cop
+  l'aplicació estigui penjada a internet amb una URL pública no n'hi hagi
+  prou amb l'enllaç per veure els resultats de tothom.
+- A les **evidències**, en canvi, cada alumne/a només veu la seva pròpia
+  fila (mai la dels companys) — ni noms, ni notes, ni qui ha estat el/la
+  primer/a de la classe. Hi veu, això sí, l'historial complet de tots els
+  seus propis intents, amb la data i l'hora exactes de cadascun. Això
+  protegeix la privacitat de les notes de l'alumnat entre companys (2026-10-27).
+- Als **concursos**, en canvi, el marcador és expressament públic per a
+  tots els equips que hi participen (és el sentit mateix d'una
+  competició): hi surten els noms de tots els equips i el seu progrés. Un
+  compte que no estigui assignat com a equip d'un concurs concret no en pot
+  veure ni el detall ni el marcador (rep un error 403), ni li apareix a la
+  seva llista de concursos.
 - La comprovació de sortida és "lleugera": no analitza si el codi ha
   calculat el valor de debò o l'ha escrit directament; és un compromís
   raonable per a un instrument formatiu de baix risc com aquest.

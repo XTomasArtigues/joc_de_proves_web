@@ -10,6 +10,7 @@ const crypto = require("crypto");
 const store = require("./lib/store");
 const { executaIAvalua } = require("./lib/corrector");
 const { aplicaEntregaEvidencia, aplicaEntregaRepte } = require("./lib/nota");
+const { aplicaEntregaConcurs, calculaMarcador } = require("./lib/concurs");
 const { generaHash, comprovaContrasenya } = require("./lib/credencials");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -154,6 +155,40 @@ function visiblePerAlumnat(ev) {
   return !ev.ocult;
 }
 
+// --- Concursos (equips): informació "pública" que s'envia a l'alumnat ---
+
+// Informació bàsica d'un concurs més si ja ha començat / ja ha acabat, a
+// partir de `dataInici` i `duracioMinuts` (calculat sempre al moment, mai
+// desat, perquè depèn de l'hora actual).
+function concursResum(c) {
+  const ara = Date.now();
+  const inici = new Date(c.dataInici).getTime();
+  const fi = inici + (c.duracioMinuts || 0) * 60000;
+  return {
+    id: c.id,
+    nom: c.nom,
+    dataInici: c.dataInici,
+    duracioMinuts: c.duracioMinuts,
+    bonusPrimer: c.bonusPrimer || 0,
+    haComencat: ara >= inici,
+    haAcabat: ara > fi,
+  };
+}
+
+// No revelem mai les sortides esperades ni els casos de prova d'un problema
+// de concurs a l'alumnat (equips), igual que amb les evidències/reptes.
+function problemaPublic(pr) {
+  return { codi: pr.codi, titol: pr.titol, enunciat: pr.enunciat, punts: pr.punts || 0, numProves: (pr.proves || []).length };
+}
+
+// El marcador és, per naturalesa, visible a tots els equips participants
+// (és un rànquing públic de la competició) — hi afegim el nom de cada
+// equip perquè el frontend no hagi de fer una crida a part.
+function afegeixNomsAMarcador(marcador) {
+  const alumnes = store.carregaAlumnes();
+  return marcador.map((fila) => ({ ...fila, nom: (alumnes[fila.equip] && alumnes[fila.equip].nom) || fila.equip }));
+}
+
 function estatPublic(estat) {
   const alumnes = Object.entries(estat.alumnes || {}).map(([usuari, a]) => ({
     usuari,
@@ -170,6 +205,31 @@ function estatPublic(estat) {
     return (b.nota || 0) - (a.nota || 0);
   });
   return { primerSuperat: estat.primerSuperat || null, alumnes };
+}
+
+// Vista "privada" de l'estat d'una EVIDÈNCIA per a un sol alumne/a: a
+// diferència d'`estatPublic`, no inclou cap dada dels companys (ni noms, ni
+// notes, ni qui va ser el/la primer/a) — només la pròpia fila, amb l'historial
+// complet dels seus intents (data i hora de cadascun). (2026-10-27, per
+// protegir la privacitat de l'alumnat a les evidències.)
+function estatPropi(estat, usuari) {
+  const a = (estat.alumnes || {})[usuari];
+  if (!a) return { alumnes: [] };
+  return {
+    alumnes: [
+      {
+        usuari,
+        nom: a.nom || usuari,
+        intents: a.intents,
+        superat: a.superat,
+        intentSuperat: a.intentSuperat != null ? a.intentSuperat : null,
+        nota: a.nota != null ? a.nota : null,
+        primer: !!a.primer,
+        bloquejat: !!a.bloquejat,
+        historial: a.historial || [],
+      },
+    ],
+  };
 }
 
 // ---------- gestor principal ----------
@@ -256,9 +316,88 @@ const server = http.createServer(async (req, res) => {
       // Requereix sessió d'alumnat: el rànquing inclou noms reals i notes,
       // i un cop l'aplicació estigui penjada a internet no ha de ser
       // visible per a qualsevol que tingui l'enllaç.
-      if (!usuariDeToken(req)) return enviaError(res, 401, "Cal iniciar sessió per veure el rànquing.");
+      const usuari = usuariDeToken(req);
+      if (!usuari) return enviaError(res, 401, "Cal iniciar sessió per veure el rànquing.");
       const estat = store.carregaEstat(m[1]);
+      const ev = store.carregaEvidencies()[m[1]];
+      // A les evidències, per privacitat, cada alumne/a només veu la seva
+      // pròpia fila (amb l'historial de tots els seus intents); als reptes
+      // es manté el rànquing compartit de tota la classe (2026-10-27).
+      if (ev && tipusDe(ev) === "evidencia") {
+        return enviaJSON(res, 200, estatPropi(estat, usuari));
+      }
       return enviaJSON(res, 200, estatPublic(estat));
+    }
+
+    // --- Concursos (equips): llista, detall, entrega i marcador ---
+    // Un "equip" és un compte d'alumnat normal (mateix login, mateix fitxer
+    // alumnes.json) que la professora ha afegit a la llista `equips` d'un
+    // concurs des del panell d'administració (2026-10-27).
+    if (p === "/api/concursos" && metode === "GET") {
+      const usuari = usuariDeToken(req);
+      if (!usuari) return enviaError(res, 401, "Cal iniciar sessió per veure els concursos.");
+      const concursos = store.carregaConcursos();
+      const llista = Object.values(concursos)
+        .filter((c) => (c.equips || []).includes(usuari))
+        .map(concursResum);
+      return enviaJSON(res, 200, llista);
+    }
+
+    if ((m = p.match(/^\/api\/concursos\/([^/]+)$/)) && metode === "GET") {
+      const usuari = usuariDeToken(req);
+      if (!usuari) return enviaError(res, 401, "Cal iniciar sessió per veure el concurs.");
+      const concurs = store.carregaConcursos()[m[1]];
+      if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+      if (!(concurs.equips || []).includes(usuari)) return enviaError(res, 403, "El teu equip no participa en aquest concurs.");
+      const resum = concursResum(concurs);
+      if (!resum.haComencat) return enviaJSON(res, 200, { ...resum, problemes: [] });
+      return enviaJSON(res, 200, { ...resum, problemes: (concurs.problemes || []).map(problemaPublic) });
+    }
+
+    if ((m = p.match(/^\/api\/concursos\/([^/]+)\/problemes\/([^/]+)\/entrega$/)) && metode === "POST") {
+      const usuari = usuariDeToken(req);
+      if (!usuari) return enviaError(res, 401, "Cal iniciar sessió per entregar.");
+      const concurs = store.carregaConcursos()[m[1]];
+      if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+      if (!(concurs.equips || []).includes(usuari)) return enviaError(res, 403, "El teu equip no participa en aquest concurs.");
+      const resum = concursResum(concurs);
+      if (!resum.haComencat) {
+        return enviaError(res, 409, "Aquest concurs encara no ha començat.");
+      }
+      if (resum.haAcabat) return enviaError(res, 409, "Aquest concurs ja ha finalitzat; ja no es poden fer més entregues.");
+      const problema = (concurs.problemes || []).find((pr) => pr.codi === m[2]);
+      if (!problema) return enviaError(res, 404, "Problema no trobat.");
+      if (!problema.proves || !problema.proves.length) return enviaError(res, 400, "Aquest problema encara no té cap joc de proves configurat.");
+
+      const cos = await llegeixCos(req);
+      const codiScript = (cos.codiScript || "").toString();
+      if (!codiScript.trim()) return enviaError(res, 400, "El script és buit.");
+
+      const { resultatsProves, totesOk } = executaIAvalua(codiScript, problema.proves);
+      const estatConcurs = store.carregaEstatConcurs(m[1]);
+      let resultat;
+      try {
+        resultat = aplicaEntregaConcurs({ estatConcurs, equip: usuari, codiProblema: m[2], totesOk });
+      } catch (err) {
+        if (err.public) return enviaError(res, 409, err.message);
+        throw err;
+      }
+      store.desaEstatConcurs(m[1], estatConcurs);
+      return enviaJSON(res, 200, { resultatsProves, superat: totesOk, intents: resultat.intents });
+    }
+
+    if ((m = p.match(/^\/api\/concursos\/([^/]+)\/marcador$/)) && metode === "GET") {
+      const usuari = usuariDeToken(req);
+      if (!usuari) return enviaError(res, 401, "Cal iniciar sessió per veure el marcador.");
+      const concurs = store.carregaConcursos()[m[1]];
+      if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+      if (!(concurs.equips || []).includes(usuari)) return enviaError(res, 403, "El teu equip no participa en aquest concurs.");
+      const estatConcurs = store.carregaEstatConcurs(m[1]);
+      const marcador = calculaMarcador({ concurs, estatConcurs });
+      return enviaJSON(res, 200, {
+        problemes: (concurs.problemes || []).map((pr) => ({ codi: pr.codi, titol: pr.titol, punts: pr.punts || 0 })),
+        marcador: afegeixNomsAMarcador(marcador),
+      });
     }
 
     // --- Alumnat: login, perfil propi i canvi de contrasenya ---
@@ -534,6 +673,167 @@ const server = http.createServer(async (req, res) => {
           ok: true,
           evidenciesImportades: Object.keys(cos.evidencies).length,
           alumnesImportats: cos.alumnes ? Object.keys(cos.alumnes).length : 0,
+        });
+      }
+
+      // --- Admin: gestió de concursos (competicions per equips) ---
+      if (p === "/api/admin/concursos" && metode === "GET") {
+        return enviaJSON(res, 200, Object.values(store.carregaConcursos()));
+      }
+
+      if (p === "/api/admin/concursos" && metode === "POST") {
+        const cos = await llegeixCos(req);
+        const id = (cos.id || "").toString().trim();
+        const nom = (cos.nom || "").toString().trim();
+        if (!id) return enviaError(res, 400, "Cal un identificador (per exemple C1).");
+        if (!nom) return enviaError(res, 400, "Cal un nom per al concurs.");
+        if (!cos.dataInici) return enviaError(res, 400, "Cal una data i hora d'inici.");
+        const duracioMinuts = parseInt(cos.duracioMinuts, 10);
+        if (!duracioMinuts || duracioMinuts <= 0) return enviaError(res, 400, "Cal una durada (en minuts) superior a 0.");
+        const bonusPrimer = parseInt(cos.bonusPrimer, 10);
+        const concursos = store.carregaConcursos();
+        if (concursos[id]) return enviaError(res, 409, `Ja existeix un concurs amb l'identificador ${id}.`);
+        concursos[id] = {
+          id,
+          nom,
+          dataInici: new Date(cos.dataInici).toISOString(),
+          duracioMinuts,
+          bonusPrimer: Number.isFinite(bonusPrimer) && bonusPrimer > 0 ? bonusPrimer : 0,
+          equips: [],
+          problemes: [],
+        };
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 201, concursos[id]);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)$/)) && metode === "PUT") {
+        const cos = await llegeixCos(req);
+        const concursos = store.carregaConcursos();
+        if (!concursos[m[1]]) return enviaError(res, 404, "Concurs no trobat.");
+        if (cos.nom !== undefined) concursos[m[1]].nom = cos.nom.toString();
+        if (cos.dataInici !== undefined) concursos[m[1]].dataInici = new Date(cos.dataInici).toISOString();
+        if (cos.duracioMinuts !== undefined) concursos[m[1]].duracioMinuts = parseInt(cos.duracioMinuts, 10) || concursos[m[1]].duracioMinuts;
+        if (cos.bonusPrimer !== undefined) {
+          const bonusPrimer = parseInt(cos.bonusPrimer, 10);
+          concursos[m[1]].bonusPrimer = Number.isFinite(bonusPrimer) && bonusPrimer > 0 ? bonusPrimer : 0;
+        }
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 200, concursos[m[1]]);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)$/)) && metode === "DELETE") {
+        const concursos = store.carregaConcursos();
+        if (!concursos[m[1]]) return enviaError(res, 404, "Concurs no trobat.");
+        delete concursos[m[1]];
+        store.desaConcursos(concursos);
+        store.esborraEstatConcurs(m[1]);
+        return enviaJSON(res, 200, { ok: true });
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/equips$/)) && metode === "PUT") {
+        const cos = await llegeixCos(req);
+        const concursos = store.carregaConcursos();
+        if (!concursos[m[1]]) return enviaError(res, 404, "Concurs no trobat.");
+        const equips = Array.isArray(cos.equips) ? cos.equips.map((u) => u.toString()) : [];
+        const alumnes = store.carregaAlumnes();
+        const inexistents = equips.filter((u) => !alumnes[u]);
+        if (inexistents.length) return enviaError(res, 400, `Aquests usuaris no existeixen: ${inexistents.join(", ")}.`);
+        concursos[m[1]].equips = equips;
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 200, concursos[m[1]]);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/problemes$/)) && metode === "POST") {
+        const cos = await llegeixCos(req);
+        const concursos = store.carregaConcursos();
+        if (!concursos[m[1]]) return enviaError(res, 404, "Concurs no trobat.");
+        const codi = (cos.codi || "").toString().trim();
+        if (!codi) return enviaError(res, 400, "Cal un codi per al problema (per exemple A, B, C…).");
+        concursos[m[1]].problemes = concursos[m[1]].problemes || [];
+        if (concursos[m[1]].problemes.some((pr) => pr.codi === codi)) {
+          return enviaError(res, 409, `Ja existeix un problema amb el codi ${codi} en aquest concurs.`);
+        }
+        const punts = parseInt(cos.punts, 10);
+        const problema = {
+          codi,
+          titol: (cos.titol || "").toString(),
+          enunciat: (cos.enunciat || "").toString(),
+          punts: Number.isFinite(punts) && punts > 0 ? punts : 0,
+          proves: [],
+        };
+        concursos[m[1]].problemes.push(problema);
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 201, concursos[m[1]]);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/problemes\/([^/]+)$/)) && metode === "PUT") {
+        const cos = await llegeixCos(req);
+        const concursos = store.carregaConcursos();
+        const concurs = concursos[m[1]];
+        if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+        const problema = (concurs.problemes || []).find((pr) => pr.codi === m[2]);
+        if (!problema) return enviaError(res, 404, "Problema no trobat.");
+        if (cos.titol !== undefined) problema.titol = cos.titol.toString();
+        if (cos.enunciat !== undefined) problema.enunciat = cos.enunciat.toString();
+        if (cos.punts !== undefined) {
+          const punts = parseInt(cos.punts, 10);
+          problema.punts = Number.isFinite(punts) && punts > 0 ? punts : 0;
+        }
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 200, concurs);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/problemes\/([^/]+)$/)) && metode === "DELETE") {
+        const concursos = store.carregaConcursos();
+        const concurs = concursos[m[1]];
+        if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+        const idx = (concurs.problemes || []).findIndex((pr) => pr.codi === m[2]);
+        if (idx === -1) return enviaError(res, 404, "Problema no trobat.");
+        concurs.problemes.splice(idx, 1);
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 200, concurs);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/problemes\/([^/]+)\/proves$/)) && metode === "POST") {
+        const cos = await llegeixCos(req);
+        const concursos = store.carregaConcursos();
+        const concurs = concursos[m[1]];
+        if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+        const problema = (concurs.problemes || []).find((pr) => pr.codi === m[2]);
+        if (!problema) return enviaError(res, 404, "Problema no trobat.");
+        const sortides = normalitzaSortides(cos.sortidaEsperada);
+        if (!cos.nom || sortides.length === 0) return enviaError(res, 400, "Cal un nom de prova i almenys una sortida esperada.");
+        problema.proves = problema.proves || [];
+        problema.proves.push({
+          nom: cos.nom.toString(),
+          entrada: (cos.entrada || "").toString(),
+          sortidaEsperada: sortides.length === 1 ? sortides[0] : sortides,
+          mode: cos.mode === "exacta" ? "exacta" : "conte",
+        });
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 201, concurs);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/problemes\/([^/]+)\/proves\/(\d+)$/)) && metode === "DELETE") {
+        const concursos = store.carregaConcursos();
+        const concurs = concursos[m[1]];
+        if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+        const problema = (concurs.problemes || []).find((pr) => pr.codi === m[2]);
+        const idx = parseInt(m[3], 10);
+        if (!problema || !problema.proves || !problema.proves[idx]) return enviaError(res, 404, "Prova no trobada.");
+        problema.proves.splice(idx, 1);
+        store.desaConcursos(concursos);
+        return enviaJSON(res, 200, concurs);
+      }
+
+      if ((m = p.match(/^\/api\/admin\/concursos\/([^/]+)\/marcador$/)) && metode === "GET") {
+        const concurs = store.carregaConcursos()[m[1]];
+        if (!concurs) return enviaError(res, 404, "Concurs no trobat.");
+        const estatConcurs = store.carregaEstatConcurs(m[1]);
+        const marcador = calculaMarcador({ concurs, estatConcurs });
+        return enviaJSON(res, 200, {
+          problemes: (concurs.problemes || []).map((pr) => ({ codi: pr.codi, titol: pr.titol, punts: pr.punts || 0 })),
+          marcador: afegeixNomsAMarcador(marcador),
         });
       }
 
