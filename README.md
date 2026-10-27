@@ -220,17 +220,18 @@ quants intents ha fet i (si l'ha superat) a quin intent ho va aconseguir.
 Útil per preparar-se abans d'una evidència avaluable, o simplement per
 practicar sense pressió de nota.
 
-### Amagar o mostrar un repte a l'alumnat
+### Amagar o mostrar un element a l'alumnat
 
-Des del panell d'administració pots amagar un repte perquè l'alumnat deixi
-de veure'l (ni a la llista ni per entrar-hi directament), i tornar-lo a
-mostrar quan vulguis — per exemple, per anar-los obrint un a un a mesura
-que avança la sessió, o per retirar-ne un que ja no toca sense haver
-d'eliminar-lo (i perdre tot l'historial). El botó "🙈 Amaga a l'alumnat" /
-"👁️ Mostra a l'alumnat" apareix tant a la targeta del repte al taulell com
-dins de la seva pàgina de detall. Un repte amagat continua sent totalment
-visible per a tu al panell, amb una etiqueta "🙈 amagat a l'alumnat"; les
-evidències avaluables no es poden amagar (sempre són visibles).
+Des del panell d'administració pots amagar qualsevol evidència o repte
+perquè l'alumnat deixi de veure'l (ni a la llista ni per entrar-hi
+directament), i tornar-lo a mostrar quan vulguis — per exemple, per anar
+obrint els reptes un a un a mesura que avança la sessió, o per no mostrar
+encara una evidència que estàs preparant. El botó "🙈 Amaga a l'alumnat" /
+"👁️ Mostra a l'alumnat" apareix tant a la targeta de l'element al taulell
+com dins de la seva pàgina de detall. Un element amagat continua sent
+totalment visible per a tu al panell, amb una etiqueta "🙈 amagat a
+l'alumnat", i tot el que l'alumnat ja hi hagués entregat es conserva i
+torna a aparèixer en tornar-lo a mostrar.
 
 ## Com es comprova cada prova
 
