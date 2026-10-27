@@ -9,6 +9,26 @@ function h(html) {
 function escapa(text) {
   return (text || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function formataData(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("ca-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return "—";
+  }
+}
+async function alternaOcult(codi, ocultActual, callback) {
+  try {
+    await api(`/api/admin/evidencies/${encodeURIComponent(codi)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ocult: !ocultActual }),
+    });
+    callback();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
 
 // ---- bloc reutilitzable per introduir una o més sortides acceptades ----
 // Algunes proves admeten més d'una sortida correcta (p. ex. una condició com
@@ -129,12 +149,22 @@ async function mostraDashboard() {
   const reptesLlista = evidencies.filter((ev) => ev.tipus === "repte");
 
   function creaCardElement(ev) {
+    const esRepte = ev.tipus === "repte";
     const card = h(`
       <div class="card card-clickable">
-        <h3>${escapa(ev.codi)} — ${escapa(ev.titol) || "<sense títol>"} <span class="badge">${(ev.proves || []).length} prova(es)</span></h3>
+        <h3>${escapa(ev.codi)} — ${escapa(ev.titol) || "<sense títol>"} <span class="badge">${(ev.proves || []).length} prova(es)</span>${
+      ev.ocult ? ' <span class="badge" style="background:#999">🙈 amagat a l\'alumnat</span>' : ""
+    }</h3>
         <p>${escapa((ev.enunciat || "").slice(0, 140))}${(ev.enunciat || "").length > 140 ? "…" : ""}</p>
+        ${esRepte ? `<button type="button" class="secondary btn-toggle-ocult">${ev.ocult ? "👁️ Mostra a l'alumnat" : "🙈 Amaga a l'alumnat"}</button>` : ""}
       </div>`);
     card.addEventListener("click", () => mostraDetallEvidencia(ev.codi));
+    if (esRepte) {
+      card.querySelector(".btn-toggle-ocult").addEventListener("click", (e) => {
+        e.stopPropagation();
+        alternaOcult(ev.codi, ev.ocult, mostraDashboard);
+      });
+    }
     return card;
   }
 
@@ -411,7 +441,9 @@ async function mostraDetallEvidencia(codi) {
   tornar.addEventListener("click", mostraDashboard);
   app.appendChild(tornar);
 
-  app.appendChild(h(`<h2>${escapa(ev.codi)} <span class="badge" style="background:${tipus === "repte" ? "#8e6fc0" : "var(--mission)"};">${tipus === "repte" ? "Repte de pràctica" : "Evidència avaluable"}</span></h2>`));
+  app.appendChild(h(`<h2>${escapa(ev.codi)} <span class="badge" style="background:${tipus === "repte" ? "#8e6fc0" : "var(--mission)"};">${tipus === "repte" ? "Repte de pràctica" : "Evidència avaluable"}</span>${
+    tipus === "repte" && ev.ocult ? ' <span class="badge" style="background:#999">🙈 amagat a l\'alumnat</span>' : ""
+  }</h2>`));
   app.appendChild(h(`<div class="avis">${
     tipus === "repte"
       ? "🎯 És un <strong>repte de pràctica</strong>: no té nota, i l'alumnat pot entregar-lo tants cops com vulgui. Només es mostren els intents que ha necessitat."
@@ -430,12 +462,18 @@ async function mostraDetallEvidencia(codi) {
       <label>Enunciat (el que veu l'alumnat)</label>
       <textarea class="simple" id="ed-enunciat" rows="6">${escapa(ev.enunciat)}</textarea>
       <button id="btn-desa-ev">Desa els canvis</button>
+      ${tipus === "repte" ? `<button type="button" id="btn-toggle-ocult-detall" class="secondary">${ev.ocult ? "👁️ Mostra aquest repte a l'alumnat" : "🙈 Amaga aquest repte a l'alumnat"}</button>` : ""}
       <button id="btn-elimina-ev" class="danger">Elimina aquest element</button>
       <p id="ev-msg"></p>
     </div>
   `);
   app.appendChild(formEv);
   document.getElementById("ed-tipus").value = tipus;
+  if (tipus === "repte") {
+    document.getElementById("btn-toggle-ocult-detall").addEventListener("click", () => {
+      alternaOcult(codi, ev.ocult, () => mostraDetallEvidencia(codi));
+    });
+  }
   document.getElementById("btn-desa-ev").addEventListener("click", async () => {
     const titol = document.getElementById("ed-titol").value;
     const enunciat = document.getElementById("ed-enunciat").value;
@@ -615,10 +653,11 @@ function renderitzaEstatAdmin(div, estat, tipus) {
           <td>${escapa(nom)}</td>
           <td>${a.intents}</td>
           <td>${a.superat ? `Sí (a l'intent ${a.intentSuperat})` : "Encara no"}</td>
+          <td>${formataData(a.ultimIntent)}</td>
         </tr>`;
       })
       .join("");
-    div.innerHTML = `<table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th></tr></thead><tbody>${files}</tbody></table>`;
+    div.innerHTML = `<table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th><th>Últim intent</th></tr></thead><tbody>${files}</tbody></table>`;
     return;
   }
   const files = noms
@@ -633,12 +672,13 @@ function renderitzaEstatAdmin(div, estat, tipus) {
         <td>${a.intents}</td>
         <td>${estatText}</td>
         <td>${a.nota != null ? a.nota : "pendent"}</td>
+        <td>${formataData(a.ultimIntent)}</td>
       </tr>`;
     })
     .join("");
   div.innerHTML = `
     ${estat.primerSuperat ? `<p>🏆 Primer/a en superar-ho: <strong>${escapa(estat.primerSuperat)}</strong></p>` : ""}
-    <table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th><th>Nota</th></tr></thead><tbody>${files}</tbody></table>`;
+    <table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th><th>Nota</th><th>Últim intent</th></tr></thead><tbody>${files}</tbody></table>`;
 }
 
 // ---- arrencada ----
