@@ -51,7 +51,14 @@ l'eina amb l'alumnat de debò (botó "Canviar contrasenya" al dashboard).
     nom, una entrada opcional (per si el script fa servir `promptSync` /
     `readline`) i una o més sortides acceptades que ha d'aparèixer.
   - Veure, per a cada element, l'estat de tots els lliuraments: intents, si
-    l'ha superat, a quin intent, i (només a les evidències) la nota.
+    l'ha superat, a quin intent, (només a les evidències) la nota, i **la
+    data i hora de l'últim intent** de cada alumne/a.
+  - **Amagar o tornar a mostrar un repte** a l'alumnat (botó "🙈 Amaga a
+    l'alumnat" / "👁️ Mostra a l'alumnat", tant a la llista com dins de cada
+    repte) — útil per anar obrint els reptes a mesura que avança la classe,
+    o per retirar-ne un que ja no toca. Un cop amagat, l'alumnat no el veu
+    enlloc ni hi pot entregar res; tot el que ja tenia fet es conserva i
+    torna a aparèixer en tornar-lo a mostrar.
   - Esborrar l'historial d'un element per tornar a començar.
   - Crear i gestionar els **comptes de l'alumnat** (botó "👤 Alumnat").
   - Canviar la contrasenya d'administració.
@@ -212,6 +219,18 @@ fórmula de nota ni límit d'intents — només es mostra, per a cada alumne/a,
 quants intents ha fet i (si l'ha superat) a quin intent ho va aconseguir.
 Útil per preparar-se abans d'una evidència avaluable, o simplement per
 practicar sense pressió de nota.
+
+### Amagar o mostrar un repte a l'alumnat
+
+Des del panell d'administració pots amagar un repte perquè l'alumnat deixi
+de veure'l (ni a la llista ni per entrar-hi directament), i tornar-lo a
+mostrar quan vulguis — per exemple, per anar-los obrint un a un a mesura
+que avança la sessió, o per retirar-ne un que ja no toca sense haver
+d'eliminar-lo (i perdre tot l'historial). El botó "🙈 Amaga a l'alumnat" /
+"👁️ Mostra a l'alumnat" apareix tant a la targeta del repte al taulell com
+dins de la seva pàgina de detall. Un repte amagat continua sent totalment
+visible per a tu al panell, amb una etiqueta "🙈 amagat a l'alumnat"; les
+evidències avaluables no es poden amagar (sempre són visibles).
 
 ## Com es comprova cada prova
 

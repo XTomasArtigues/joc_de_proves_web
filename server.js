@@ -147,6 +147,13 @@ function evidenciaPublica(ev) {
   return { codi: ev.codi, tipus: tipusDe(ev), titol: ev.titol, enunciat: ev.enunciat, numProves: (ev.proves || []).length };
 }
 
+// Un element (normalment un repte) amagat per la professora no ha d'aparèixer
+// mai a l'API pública (llista, detall ni entrega) — només al panell
+// d'administració, on sempre es veuen tots, amagats o no.
+function visiblePerAlumnat(ev) {
+  return !ev.ocult;
+}
+
 function estatPublic(estat) {
   const alumnes = Object.entries(estat.alumnes || {}).map(([usuari, a]) => ({
     usuari,
@@ -175,13 +182,13 @@ const server = http.createServer(async (req, res) => {
     // --- API pública (alumnat) ---
     if (p === "/api/evidencies" && metode === "GET") {
       const ev = store.carregaEvidencies();
-      return enviaJSON(res, 200, Object.values(ev).map(evidenciaPublica));
+      return enviaJSON(res, 200, Object.values(ev).filter(visiblePerAlumnat).map(evidenciaPublica));
     }
 
     let m;
     if ((m = p.match(/^\/api\/evidencies\/([^/]+)$/)) && metode === "GET") {
       const ev = store.carregaEvidencies()[m[1]];
-      if (!ev) return enviaError(res, 404, "Evidència no trobada.");
+      if (!ev || !visiblePerAlumnat(ev)) return enviaError(res, 404, "Evidència no trobada.");
       return enviaJSON(res, 200, evidenciaPublica(ev));
     }
 
@@ -197,7 +204,7 @@ const server = http.createServer(async (req, res) => {
       const codiScript = (cos.codiScript || "").toString();
       if (!codiScript.trim()) return enviaError(res, 400, "El script és buit.");
       const ev = store.carregaEvidencies()[codi];
-      if (!ev) return enviaError(res, 404, "Element no trobat.");
+      if (!ev || !visiblePerAlumnat(ev)) return enviaError(res, 404, "Element no trobat.");
       if (!ev.proves || !ev.proves.length) return enviaError(res, 400, "Aquest element encara no té cap joc de proves configurat.");
 
       const tipus = tipusDe(ev);
@@ -325,7 +332,7 @@ const server = http.createServer(async (req, res) => {
         const totes = store.carregaEvidencies();
         if (totes[codi]) return enviaError(res, 409, `Ja existeix un element amb el codi ${codi}.`);
         const tipus = cos.tipus === "repte" ? "repte" : "evidencia";
-        totes[codi] = { codi, tipus, titol: (cos.titol || "").toString(), enunciat: (cos.enunciat || "").toString(), proves: [] };
+        totes[codi] = { codi, tipus, titol: (cos.titol || "").toString(), enunciat: (cos.enunciat || "").toString(), proves: [], ocult: false };
         store.desaEvidencies(totes);
         return enviaJSON(res, 201, totes[codi]);
       }
@@ -337,6 +344,7 @@ const server = http.createServer(async (req, res) => {
         totes[m[1]].titol = (cos.titol ?? totes[m[1]].titol).toString();
         totes[m[1]].enunciat = (cos.enunciat ?? totes[m[1]].enunciat).toString();
         if (cos.tipus !== undefined) totes[m[1]].tipus = cos.tipus === "repte" ? "repte" : "evidencia";
+        if (cos.ocult !== undefined) totes[m[1]].ocult = !!cos.ocult;
         store.desaEvidencies(totes);
         return enviaJSON(res, 200, totes[m[1]]);
       }
