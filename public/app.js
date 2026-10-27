@@ -474,7 +474,7 @@ async function mostraEvidencia(codi) {
   if (esRepte) {
     app.appendChild(h(`<div class="avis">🎯 Això és un <strong>repte de pràctica</strong>: no té nota, i pots entregar-lo tants cops com vulguis fins que et surti bé.</div>`));
   } else {
-    app.appendChild(h(`<div class="avis">📋 Això és una <strong>evidència avaluable</strong>: la nota depèn de l'intent en què la superis, i tens un màxim de <strong>6 intents</strong>. Si els esgotes sense superar-la, la nota final queda fixada.</div>`));
+    app.appendChild(h(`<div class="avis">📋 Això és una <strong>evidència avaluable</strong>: la nota depèn de l'intent en què la superis (1r - 10, 2n - 8, 3r - 6, 4t - 4, 5è - 2. 6è - 1), i tens un màxim de <strong>6 intents</strong>. Si els esgotes sense superar-la, la nota final queda fixada en 1 (6è intent).</div>`));
   }
 
   if (!ev.numProves) {
