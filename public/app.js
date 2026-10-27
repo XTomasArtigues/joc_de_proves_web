@@ -9,6 +9,14 @@ function h(html) {
 function escapa(text) {
   return (text || "").toString().replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+function formataData(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("ca-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return "—";
+  }
+}
 
 // API pública (no requereix sessió): llista d'evidències/reptes, enunciat, rànquing.
 async function api(ruta, opcions) {
@@ -211,6 +219,234 @@ async function mostraLlista() {
   app.appendChild(h(`<p><small>Per practicar: sense nota, pots intentar-ho tants cops com vulguis.</small></p>`));
   if (!reptesLlista.length) app.appendChild(h(`<div class="card"><p>Encara no hi ha cap repte configurat.</p></div>`));
   reptesLlista.forEach((ev) => app.appendChild(creaCard(ev)));
+
+  const cardConcursos = h(`
+    <div class="card card-clickable" style="margin-top:28px;">
+      <h3>🏆 Concursos</h3>
+      <p>Si el teu equip participa en algun concurs, aquí trobaràs els problemes i el marcador.</p>
+    </div>`);
+  cardConcursos.addEventListener("click", () => { location.hash = "concursos"; });
+  app.appendChild(cardConcursos);
+}
+
+// ---- Concursos (equips): llista, detall, problema i marcador ----
+
+function badgeEstatConcursAlumnat(c) {
+  if (!c.haComencat) return '<span class="badge" style="background:#999">⏳ no ha començat</span>';
+  if (c.haAcabat) return '<span class="badge" style="background:#555">🏁 finalitzat</span>';
+  return '<span class="badge" style="background:#1e8449">🟢 en marxa</span>';
+}
+
+async function mostraConcursosAlumnat() {
+  app.innerHTML = "";
+  app.appendChild(barraAlumne());
+  const tornar = h(`<span class="tornar">← Totes les evidències</span>`);
+  tornar.addEventListener("click", () => (location.hash = ""));
+  app.appendChild(tornar);
+  app.appendChild(h(`<h2>🏆 Concursos</h2>`));
+
+  let concursos;
+  try {
+    concursos = await apiAlumnat("/api/concursos");
+  } catch (e) {
+    return;
+  }
+  if (!concursos.length) {
+    app.appendChild(h(`<div class="card"><p>El teu equip encara no participa en cap concurs. Parla amb la professora.</p></div>`));
+    return;
+  }
+  concursos.forEach((c) => {
+    const card = h(`
+      <div class="card card-clickable">
+        <h3>${escapa(c.nom)} ${badgeEstatConcursAlumnat(c)}</h3>
+        <p><small>Inici: ${formataData(c.dataInici)} · Durada: ${c.duracioMinuts} min</small></p>
+      </div>`);
+    card.addEventListener("click", () => { location.hash = `concurs/${encodeURIComponent(c.id)}`; });
+    app.appendChild(card);
+  });
+}
+
+async function mostraDetallConcursAlumnat(id) {
+  app.innerHTML = "";
+  app.appendChild(barraAlumne());
+  const tornar = h(`<span class="tornar">← Tots els concursos</span>`);
+  tornar.addEventListener("click", () => (location.hash = "concursos"));
+  app.appendChild(tornar);
+
+  let c;
+  try {
+    c = await apiAlumnat(`/api/concursos/${encodeURIComponent(id)}`);
+  } catch (e) {
+    app.appendChild(h(`<div class="card"><p>${escapa(e.message)}</p></div>`));
+    return;
+  }
+
+  app.appendChild(h(`<h2>${escapa(c.nom)} ${badgeEstatConcursAlumnat(c)}</h2>`));
+
+  if (!c.haComencat) {
+    app.appendChild(h(`<div class="avis">⏳ Aquest concurs encara no ha començat. Comença el <strong>${formataData(c.dataInici)}</strong> i dura ${c.duracioMinuts} minuts. Torna llavors per veure els problemes.</div>`));
+    return;
+  }
+
+  app.appendChild(
+    h(
+      `<div class="avis">${
+        c.haAcabat
+          ? "🏁 Aquest concurs ja ha finalitzat. Ja no es poden fer més entregues, però pots consultar el marcador final."
+          : `🟢 El concurs és en marxa (dura ${c.duracioMinuts} minuts des de ${formataData(c.dataInici)}). Cada problema val els punts indicats; un cop el resolgueu, no cal tornar-lo a entregar.${
+              c.bonusPrimer ? ` 🥇 El primer equip a resoldre un problema suma ${c.bonusPrimer} punts extra.` : ""
+            }`
+      }</div>`
+    )
+  );
+
+  const btnMarcador = h(`<button class="secondary">📊 Veure el marcador</button>`);
+  btnMarcador.addEventListener("click", () => { location.hash = `concurs/${encodeURIComponent(id)}/marcador`; });
+  app.appendChild(btnMarcador);
+
+  app.appendChild(h(`<h3 style="margin-top:20px;">Problemes</h3>`));
+  if (!c.problemes.length) {
+    app.appendChild(h(`<div class="card"><p>Encara no hi ha cap problema configurat.</p></div>`));
+    return;
+  }
+  c.problemes.forEach((pr) => {
+    const card = h(`
+      <div class="card card-clickable">
+        <h3>${escapa(pr.codi)} — ${escapa(pr.titol)} <span class="badge">${pr.punts} punts</span></h3>
+        <p>${escapa((pr.enunciat || "").slice(0, 140))}${(pr.enunciat || "").length > 140 ? "…" : ""}</p>
+      </div>`);
+    card.addEventListener("click", () => { location.hash = `concurs/${encodeURIComponent(id)}/${encodeURIComponent(pr.codi)}`; });
+    app.appendChild(card);
+  });
+}
+
+async function mostraProblemaConcurs(id, codiProblema) {
+  app.innerHTML = "";
+  app.appendChild(barraAlumne());
+  const tornar = h(`<span class="tornar">← Tornar al concurs</span>`);
+  tornar.addEventListener("click", () => { location.hash = `concurs/${encodeURIComponent(id)}`; });
+  app.appendChild(tornar);
+
+  let c;
+  try {
+    c = await apiAlumnat(`/api/concursos/${encodeURIComponent(id)}`);
+  } catch (e) {
+    app.appendChild(h(`<div class="card"><p>${escapa(e.message)}</p></div>`));
+    return;
+  }
+  const pr = (c.problemes || []).find((x) => x.codi === codiProblema);
+  if (!pr) {
+    app.appendChild(h(`<div class="card"><p>Problema no trobat.</p></div>`));
+    return;
+  }
+
+  app.appendChild(h(`<h2>${escapa(pr.codi)} — ${escapa(pr.titol)} <span class="badge">${pr.punts} punts</span></h2>`));
+  app.appendChild(h(`<div class="card"><p class="enunciat">${escapa(pr.enunciat)}</p></div>`));
+
+  if (c.haAcabat) {
+    app.appendChild(h(`<div class="avis">🏁 Aquest concurs ja ha finalitzat; ja no es poden fer més entregues.</div>`));
+    return;
+  }
+  if (!pr.numProves) {
+    app.appendChild(h(`<div class="avis">Aquest problema encara no té cap joc de proves configurat per la professora.</div>`));
+    return;
+  }
+
+  const bloc = h(`
+    <div class="card">
+      <label>El vostre script</label>
+      <textarea class="simple" id="codi-script" rows="10" spellcheck="false" placeholder="Escriu aquí el vostre codi…"></textarea>
+      <button id="btn-entrega">Entrega i comprova</button>
+      <div id="resultat"></div>
+    </div>`);
+  app.appendChild(bloc);
+  document.getElementById("btn-entrega").addEventListener("click", async () => {
+    const codiScript = document.getElementById("codi-script").value;
+    const resultatDiv = document.getElementById("resultat");
+    if (!codiScript.trim()) {
+      resultatDiv.innerHTML = `<div class="resultat no-ok">El script és buit.</div>`;
+      return;
+    }
+    const btn = document.getElementById("btn-entrega");
+    btn.disabled = true;
+    btn.textContent = "Comprovant…";
+    try {
+      const res = await apiAlumnat(`/api/concursos/${encodeURIComponent(id)}/problemes/${encodeURIComponent(codiProblema)}/entrega`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codiScript }),
+      });
+      const proves = res.resultatsProves
+        .map((r) => `<div class="prova-linia"><span class="${r.ok ? "prova-ok" : "prova-fail"}">${r.ok ? "✅" : "❌"} ${escapa(r.nom)}</span><br><small>${escapa(r.detall)}</small></div>`)
+        .join("");
+      resultatDiv.innerHTML = `
+        <div class="resultat ${res.superat ? "ok" : "no-ok"}">
+          <p><strong>Intent número ${res.intents}.</strong> ${res.superat ? "✅ PROBLEMA RESOLT" : "❌ Encara no"}</p>
+          ${proves}
+        </div>`;
+    } catch (e) {
+      resultatDiv.innerHTML = `<div class="resultat no-ok">${escapa(e.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Entrega i comprova";
+    }
+  });
+}
+
+async function mostraMarcadorConcurs(id) {
+  app.innerHTML = "";
+  app.appendChild(barraAlumne());
+  const tornar = h(`<span class="tornar">← Tornar al concurs</span>`);
+  tornar.addEventListener("click", () => { location.hash = `concurs/${encodeURIComponent(id)}`; });
+  app.appendChild(tornar);
+  app.appendChild(h(`<h2>📊 Marcador</h2>`));
+
+  let dades;
+  try {
+    dades = await apiAlumnat(`/api/concursos/${encodeURIComponent(id)}/marcador`);
+  } catch (e) {
+    app.appendChild(h(`<div class="card"><p>${escapa(e.message)}</p></div>`));
+    return;
+  }
+  const div = h(`<div></div>`);
+  app.appendChild(div);
+  renderitzaMarcadorAlumnat(div, dades);
+}
+
+function renderitzaMarcadorAlumnat(div, dades) {
+  const problemes = dades.problemes || [];
+  if (!dades.marcador || !dades.marcador.length) {
+    div.innerHTML = `<p><em>Encara no hi ha cap equip al marcador.</em></p>`;
+    return;
+  }
+  const capcaleresProblemes = problemes.map((pr) => `<th>${escapa(pr.codi)}<br /><small>${pr.punts} punts</small></th>`).join("");
+  const files = dades.marcador
+    .map((fila, i) => {
+      const celles = problemes
+        .map((pr) => {
+          const cel = fila.celles.find((c) => c.codi === pr.codi);
+          if (!cel || cel.estat === "blanc") return `<td style="background:#f4f4f4">—</td>`;
+          if (cel.estat === "vermell") return `<td style="background:#f8d7da">${cel.intents}</td>`;
+          const color = cel.estat === "primer" ? "#2e7d32" : "#c8e6c9";
+          const textColor = cel.estat === "primer" ? "#fff" : "#1b1b1b";
+          const bonusText = cel.bonus ? `<br /><small>🥇 +${cel.bonus}</small>` : "";
+          return `<td style="background:${color};color:${textColor}">${cel.intents} (${cel.tempsResolucio}+${cel.penalitzacio})${bonusText}</td>`;
+        })
+        .join("");
+      return `<tr>
+        <td><strong>${i + 1}.</strong> ${escapa(fila.nom)}</td>
+        <td><strong>${fila.punts}</strong></td>
+        <td>${fila.temps}</td>
+        ${celles}
+      </tr>`;
+    })
+    .join("");
+  div.innerHTML = `
+    <table>
+      <thead><tr><th>Equip</th><th>Punts</th><th>Temps (min)</th>${capcaleresProblemes}</tr></thead>
+      <tbody>${files}</tbody>
+    </table>
+    <p><small>🟩 verd fosc = primer equip a resoldre el problema (🥇 = bonus de punts inclòs). Format de cada cel·la: intents (minuts fins a l'encert + minuts de penalització).</small></p>`;
 }
 
 async function mostraEvidencia(codi) {
@@ -238,7 +474,7 @@ async function mostraEvidencia(codi) {
   if (esRepte) {
     app.appendChild(h(`<div class="avis">🎯 Això és un <strong>repte de pràctica</strong>: no té nota, i pots entregar-lo tants cops com vulguis fins que et surti bé.</div>`));
   } else {
-    app.appendChild(h(`<div class="avis">📋 Això és una <strong>evidència avaluable</strong>: la nota depèn de l'intent en què la superis (1r - 10, 2n - 8, 3r - 6, 4t - 4, 5è - 2, 6è - 1), i tens un màxim de <strong>6 intents</strong>. Si els esgotes sense superar-la, la nota final queda fixada en 1 (la nota del 6è intent).</div>`));
+    app.appendChild(h(`<div class="avis">📋 Això és una <strong>evidència avaluable</strong>: la nota depèn de l'intent en què la superis, i tens un màxim de <strong>6 intents</strong>. Si els esgotes sense superar-la, la nota final queda fixada.</div>`));
   }
 
   if (!ev.numProves) {
@@ -282,7 +518,11 @@ async function mostraEvidencia(codi) {
     }
   });
 
-  app.appendChild(h(`<h3>Rànquing d'aquest ${esRepte ? "repte" : "evidència"}</h3>`));
+  app.appendChild(
+    h(
+      `<h3>${esRepte ? "Rànquing d'aquest repte" : "Els teus intents d'aquesta evidència"}</h3>`
+    )
+  );
   const ranquingDiv = h(`<div id="ranquing"></div>`);
   app.appendChild(ranquingDiv);
   renderitzaRanquing(ranquingDiv, estat, esRepte);
@@ -325,7 +565,9 @@ function renderitzaResultat(div, res) {
 
 function renderitzaRanquing(div, estat, esRepte) {
   if (!estat.alumnes.length) {
-    div.innerHTML = `<p><em>Encara ningú ha entregat res per a aquest element.</em></p>`;
+    div.innerHTML = esRepte
+      ? `<p><em>Encara ningú ha entregat res per a aquest element.</em></p>`
+      : `<p><em>Encara no has entregat res per a aquesta evidència.</em></p>`;
     return;
   }
   if (esRepte) {
@@ -341,17 +583,23 @@ function renderitzaRanquing(div, estat, esRepte) {
     div.innerHTML = `<table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th></tr></thead><tbody>${files}</tbody></table>`;
     return;
   }
-  const files = estat.alumnes
-    .map(
-      (a) => `<tr>
-        <td>${escapa(a.nom)}${a.primer ? ' <span class="badge primer">🏆 primer/a</span>' : ""}</td>
-        <td>${a.intents}</td>
-        <td>${a.superat ? "Sí" : a.bloquejat ? "No (6 intents esgotats)" : "No"}</td>
-        <td>${a.nota != null ? a.nota : "pendent"}</td>
-      </tr>`
-    )
+
+  // Evidències: per privacitat, el servidor només envia la pròpia fila de
+  // l'alumne/a (mai la dels companys). Es mostra l'estat actual i, a sota,
+  // l'historial complet dels seus propis intents amb data i hora (2026-10-27).
+  const a = estat.alumnes[0];
+  const historial = a.historial || [];
+  const filesHistorial = historial
+    .map((iso, i) => `<tr><td>Intent ${i + 1}</td><td>${formataData(iso)}</td></tr>`)
     .join("");
-  div.innerHTML = `<table><thead><tr><th>Alumne/a</th><th>Intents</th><th>Superat</th><th>Nota</th></tr></thead><tbody>${files}</tbody></table>`;
+  div.innerHTML = `
+    <p>
+      <strong>Intents:</strong> ${a.intents} &middot;
+      <strong>Superat:</strong> ${a.superat ? "Sí" : a.bloquejat ? "No (6 intents esgotats)" : "No"} &middot;
+      <strong>Nota:</strong> ${a.nota != null ? a.nota : "pendent"}
+      ${a.primer ? ' <span class="badge primer">🏆 vas ser el/la primer/a de la classe</span>' : ""}
+    </p>
+    <table><thead><tr><th>Intent</th><th>Data i hora</th></tr></thead><tbody>${filesHistorial}</tbody></table>`;
 }
 
 async function carregaRanquing(codi, esRepte) {
@@ -367,9 +615,16 @@ async function carregaRanquing(codi, esRepte) {
 
 function router() {
   if (!alumneActual) return;
-  const codi = location.hash.replace(/^#/, "");
-  if (codi) mostraEvidencia(codi);
-  else mostraLlista();
+  const ruta = location.hash.replace(/^#/, "");
+  if (!ruta) return mostraLlista();
+  if (ruta === "concursos") return mostraConcursosAlumnat();
+  const mConcurs = ruta.match(/^concurs\/([^/]+)\/marcador$/);
+  if (mConcurs) return mostraMarcadorConcurs(mConcurs[1]);
+  const mProblema = ruta.match(/^concurs\/([^/]+)\/([^/]+)$/);
+  if (mProblema) return mostraProblemaConcurs(mProblema[1], mProblema[2]);
+  const mDetallConcurs = ruta.match(/^concurs\/([^/]+)$/);
+  if (mDetallConcurs) return mostraDetallConcursAlumnat(mDetallConcurs[1]);
+  mostraEvidencia(ruta);
 }
 window.addEventListener("hashchange", router);
 
