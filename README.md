@@ -146,8 +146,9 @@ de `data/` (evidències, intents, notes, comptes) **no és permanent** — es
 pot esborrar quan el servei es reinicia (per exemple, després d'un període
 d'inactivitat, o en cada nou desplegament). Si l'alumnat ha de poder entrar
 des de casa en qualsevol moment sense perdre el que ja tenia fet, cal
-activar un **disc persistent** (secció següent) — en cas contrari, fes
-servir sempre la còpia de seguretat manual:
+activar una base de dades externa gratuïta o un disc persistent de pagament
+(secció següent) — en cas contrari, fes servir sempre la còpia de seguretat
+manual:
 - Fes servir el botó **"⬇️ Còpia de seguretat"** del panell d'administració
   sovint, sobretot al final de cada sessió de classe — et descarrega un
   fitxer `.json` amb totes les evidències, jocs de proves, intents, notes
@@ -157,39 +158,62 @@ servir sempre la còpia de seguretat manual:
   altre dia), fes servir **"⬆️ Restaura còpia"** amb l'últim fitxer que et
   vas descarregar.
 
-### Fer que les dades siguin permanents: disc persistent a Render (recomanat)
+### Fer que les dades siguin permanents, sense pagar res (recomanat, 2026-11-04)
 
 Perquè l'alumnat pugui treballar des de casa a qualsevol hora sense perdre
-mai res (sense haver de fer còpies de seguretat manuals cada dia), cal
-passar del pla gratuït de Render a un pla de pagament que admeti un
-**"Disk" (disc persistent)** — al voltant de 7-8$/mes pel servei més bàsic,
-més uns 0,25$/mes per 1 GB de disc (molt més que suficient per a les dades
-d'aquesta app). Un cop fet, les dades sobreviuen tant als reinicis per
-inactivitat com als nous desplegaments.
+mai res (i sense haver de fer còpies de seguretat manuals cada dia), ara hi
+ha una opció **100% gratuïta**: en lloc de guardar les dades al disc de
+Render (que al pla gratuït es pot esborrar en qualsevol reinici), es
+guarden en una base de dades Postgres gratuïta a part — per exemple
+[Neon](https://neon.com), que no demana targeta de crèdit i no caduca per
+inactivitat. El servei de Render pot continuar al pla gratuït (0$/mes):
+l'únic efecte del pla gratuït que queda és que, si fa més de 15 minuts que
+ningú l'fa servir, el primer que hi entra ha d'esperar mig minut mentre es
+desperta — les dades no es toquen per això.
 
-Passos a Render (es fan un sol cop):
-1. Al teu servei, vés a **Settings** i canvia l'"Instance Type" del pla
-   gratuït a un de pagament (el més bàsic ja serveix).
-2. Encara a Settings, busca la secció **"Disks"** → "Add Disk". Posa-li un
-   nom (per exemple `dades`), una mida (1 GB és de sobres) i, el camp
-   important, el **"Mount Path"**: escriu-hi `/var/data`.
-3. Vés a **Environment** (variables d'entorn) i afegeix-ne una de nova:
-   clau `DATA_DIR`, valor `/var/data` (exactament el mateix camí que has
-   posat al "Mount Path" del disc).
-4. Guarda els canvis; Render tornarà a desplegar el servei automàticament.
+Passos (es fan un sol cop):
+1. Crea un compte gratuït a [neon.com](https://neon.com) (no cal targeta).
+   Crea un projecte/base de dades nova.
+2. Al tauler de Neon, copia la cadena de connexió (**"Connection string"**,
+   comença per `postgresql://...`).
+3. A Render, al teu servei, vés a **Environment** i afegeix una variable
+   nova: clau `DATABASE_URL`, valor la cadena de connexió que has copiat.
+   (Si ja tenies la variable `DATA_DIR` d'una configuració anterior amb
+   disc, pots deixar-la o treure-la — amb `DATABASE_URL` definida,
+   l'aplicació ignora el disc i fa servir sempre la base de dades.)
+4. Si el servei estava en un pla de pagament només per tenir disc
+   persistent, ara ja el pots tornar a baixar al pla gratuït ("Instance
+   Type" → Free) a **Settings** — ja no fa falta disc.
+5. Guarda els canvis; Render tornarà a desplegar el servei automàticament.
 
 **No cal tornar a introduir l'evidència d'exemple ni la contrasenya a mà**:
-la primera vegada que l'aplicació arrenca amb el disc nou (buit), ella
-mateixa hi copia l'evidència E011 i la contrasenya d'administració inicial
-que porta el projecte. A partir d'aquí, tot el que es creï o es canviï des
-del panell (noves evidències, comptes de l'alumnat, intents, contrasenyes)
-es queda al disc i ja no es perd mai, encara que Render reinicïi o
-redesplegui el servei.
+la primera vegada que l'aplicació arrenca amb la base de dades nova (buida),
+ella mateixa hi copia l'evidència E011 i la contrasenya d'administració
+inicial que porta el projecte. A partir d'aquí, tot el que es creï o es
+canviï des del panell (noves evidències, comptes de l'alumnat, intents,
+contrasenyes) es queda a la base de dades i ja no es perd mai, encara que
+Render reiniciï, redesplegui o el servei "s'adormi" per inactivitat.
 
-Demana-m'ho si vols que t'ajudi amb algun d'aquests passos quan arribi el
-moment, o si prefereixes una alternativa gratuïta (una base de dades
-externa gratuïta en lloc del disc de pagament) — és possible, però requereix
-reescriure la part de l'aplicació que desa les dades.
+**Si ja tenies dades reals a Render** (comptes d'alumnat, intents...) abans
+de fer aquest canvi: abans de res, amb el servei VELL (el d'ara), entra al
+panell d'administració i fes **"⬇️ Còpia de seguretat"** per descarregar-te-
+les. Un cop fet el canvi (passos 1-5), entra al panell del servei NOU i fes
+**"⬆️ Restaura còpia"** amb aquell fitxer — queda tot traspassat a la base
+de dades nova sense escriure res a mà.
+
+Demana-m'ho si vols que t'ajudi a fer aquest canvi quan arribi el moment.
+
+<details>
+<summary>Alternativa (de pagament): disc persistent a Render</summary>
+
+Si prefereixes no dependre de cap servei extern, es pot fer igual que abans:
+passar del pla gratuït de Render a un de pagament que admeti un **"Disk"**
+(al voltant de 7-8$/mes pel servei més bàsic, més uns 0,25$/mes per 1 GB de
+disc) i definir la variable d'entorn `DATA_DIR` apuntant al "Mount Path"
+del disc (per exemple `/var/data`). Amb `DATABASE_URL` definida (opció
+gratuïta d'amunt), aquesta variable `DATA_DIR` s'ignora.
+
+</details>
 
 ## Com funciona la nota a les evidències (regles donades per la professora, 2026-10-22)
 
