@@ -14,8 +14,6 @@ const { aplicaEntregaConcurs, calculaMarcador } = require("./lib/concurs");
 const { generaHash, comprovaContrasenya } = require("./lib/credencials");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
-const cfg = store.carregaConfig();
-const PORT = process.env.PORT || cfg.port || 3000;
 
 // ---------- tokens d'administració (en memòria; es perden en reiniciar el servidor) ----------
 const tokensAdmin = new Map(); // token -> expiracio (timestamp ms)
@@ -852,7 +850,21 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Joc de Proves escoltant a http://localhost:${PORT}`);
-  console.log(`Contrasenya d'administració actual: ${store.carregaConfig().adminPassword} (canvia-la des del panell d'administració).`);
+// L'arrencada és asíncrona perquè, en mode base de dades (DATABASE_URL
+// definida), cal esperar que `store.init()` connecti i carregui totes les
+// dades en memòria ABANS de posar-se a escoltar peticions. En mode fitxers
+// `init()` no fa res i això es resol a l'instant, com sempre.
+async function arrenca() {
+  await store.init();
+  const cfg = store.carregaConfig();
+  const PORT = process.env.PORT || cfg.port || 3000;
+  server.listen(PORT, () => {
+    console.log(`Joc de Proves escoltant a http://localhost:${PORT}`);
+    console.log(`Mode de persistència: ${store.USA_BASE_DADES ? "base de dades (DATABASE_URL)" : "fitxers locals (" + store.DATA_DIR + ")"}`);
+    console.log(`Contrasenya d'administració actual: ${store.carregaConfig().adminPassword} (canvia-la des del panell d'administració).`);
+  });
+}
+arrenca().catch((err) => {
+  console.error("Error fatal arrencant el servidor:", err);
+  process.exit(1);
 });
