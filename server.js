@@ -614,22 +614,24 @@ const server = http.createServer(async (req, res) => {
 
       if ((m = p.match(/^\/api\/admin\/alumnat\/([^/]+)\/reinicia$/)) && metode === "POST") {
         const cos = await llegeixCos(req);
+        const usuariParam = decodeURIComponent(m[1]);
         const alumnes = store.carregaAlumnes();
-        if (!alumnes[m[1]]) return enviaError(res, 404, "Compte no trobat.");
+        if (!alumnes[usuariParam]) return enviaError(res, 404, "Compte no trobat.");
         const novaContrasenya = (cos.novaContrasenya || "").toString();
         if (novaContrasenya.length < 4) return enviaError(res, 400, "La contrasenya ha de tenir almenys 4 caràcters.");
         const { sal, hash } = generaHash(novaContrasenya);
-        alumnes[m[1]].sal = sal;
-        alumnes[m[1]].hash = hash;
-        alumnes[m[1]].contrasenyaCanviada = false;
+        alumnes[usuariParam].sal = sal;
+        alumnes[usuariParam].hash = hash;
+        alumnes[usuariParam].contrasenyaCanviada = false;
         store.desaAlumnes(alumnes);
         return enviaJSON(res, 200, { ok: true });
       }
 
       if ((m = p.match(/^\/api\/admin\/alumnat\/([^/]+)$/)) && metode === "DELETE") {
+        const usuariParam = decodeURIComponent(m[1]);
         const alumnes = store.carregaAlumnes();
-        if (!alumnes[m[1]]) return enviaError(res, 404, "Compte no trobat.");
-        delete alumnes[m[1]];
+        if (!alumnes[usuariParam]) return enviaError(res, 404, "Compte no trobat.");
+        delete alumnes[usuariParam];
         store.desaAlumnes(alumnes);
         return enviaJSON(res, 200, { ok: true });
       }
@@ -858,8 +860,17 @@ async function arrenca() {
   await store.init();
   const cfg = store.carregaConfig();
   const PORT = process.env.PORT || cfg.port || 3000;
-  server.listen(PORT, () => {
-    console.log(`Joc de Proves escoltant a http://localhost:${PORT}`);
+  // IMPORTANT: cal escoltar explícitament a "0.0.0.0" (totes les interfícies
+  // IPv4), no deixar-ho sense especificar. Render exigeix això explícitament
+  // a la seva documentació: sense indicar l'adreça, segons la versió de Node
+  // i el contenidor, el procés pot acabar escoltant només a l'adreça IPv6
+  // "::" sense l'equivalència IPv4 habilitada — el propi contenidor detecta
+  // el port obert igualment (per això els logs de Render i l'arrencada
+  // semblen correctes), però el seu balancejador extern, que hi connecta per
+  // IPv4, mai hi arriba: les peticions es queden penjades indefinidament
+  // sense cap error als logs, exactament com es va observar el 2026-11-05.
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Joc de Proves escoltant a http://0.0.0.0:${PORT}`);
     console.log(`Mode de persistència: ${store.USA_BASE_DADES ? "base de dades (DATABASE_URL)" : "fitxers locals (" + store.DATA_DIR + ")"}`);
     console.log(`Contrasenya d'administració actual: ${store.carregaConfig().adminPassword} (canvia-la des del panell d'administració).`);
   });
