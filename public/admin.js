@@ -155,6 +155,8 @@ async function mostraDashboard() {
       <div class="card card-clickable">
         <h3>${escapa(ev.codi)} — ${escapa(ev.titol) || "<sense títol>"} <span class="badge">${(ev.proves || []).length} prova(es)</span>${
       ev.ocult ? ' <span class="badge" style="background:#999">🙈 amagat a l\'alumnat</span>' : ""
+    }${
+      ev.requereixPromptSync ? ' <span class="badge" style="background:#2e5b8a">⌨️ cal prompt-sync</span>' : ""
     }</h3>
         <p>${escapa((ev.enunciat || "").slice(0, 140))}${(ev.enunciat || "").length > 140 ? "…" : ""}</p>
         <button type="button" class="secondary btn-toggle-ocult">${ev.ocult ? "👁️ Mostra a l'alumnat" : "🙈 Amaga a l'alumnat"}</button>
@@ -189,6 +191,7 @@ async function mostraDashboard() {
       </div>
       <label>Enunciat</label>
       <textarea class="simple" id="nou-enunciat" rows="4" placeholder="Explica a l'alumnat què ha de fer el seu script..."></textarea>
+      <label><input type="checkbox" id="nou-requereix-prompt-sync" /> ⌨️ Cal demanar les dades per teclat (prompt-sync) — si l'script no en fa servir, l'entrega es rebutja com un intent fallit</label>
       <button id="btn-crea-evidencia">Crea l'element</button>
       <p id="crea-error" style="color:#c0392b"></p>
     </div>
@@ -198,10 +201,11 @@ async function mostraDashboard() {
     const codi = document.getElementById("nou-codi").value.trim();
     const titol = document.getElementById("nou-titol").value.trim();
     const enunciat = document.getElementById("nou-enunciat").value.trim();
+    const requereixPromptSync = document.getElementById("nou-requereix-prompt-sync").checked;
     const err = document.getElementById("crea-error");
     if (!codi) { err.textContent = "Cal un codi."; return; }
     try {
-      await api("/api/admin/evidencies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codi, titol, enunciat, tipus }) });
+      await api("/api/admin/evidencies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codi, titol, enunciat, tipus, requereixPromptSync }) });
       mostraDashboard();
     } catch (e) {
       err.textContent = e.message;
@@ -839,6 +843,7 @@ async function mostraDetallEvidencia(codi) {
       <input type="text" id="ed-titol" value="${escapa(ev.titol)}" />
       <label>Enunciat (el que veu l'alumnat)</label>
       <textarea class="simple" id="ed-enunciat" rows="6">${escapa(ev.enunciat)}</textarea>
+      <label><input type="checkbox" id="ed-requereix-prompt-sync" ${ev.requereixPromptSync ? "checked" : ""} /> ⌨️ Cal demanar les dades per teclat (prompt-sync) — si l'script no en fa servir, l'entrega es rebutja com un intent fallit</label>
       <button id="btn-desa-ev">Desa els canvis</button>
       <button type="button" id="btn-toggle-ocult-detall" class="secondary">${ev.ocult ? "👁️ Mostra a l'alumnat" : "🙈 Amaga a l'alumnat"}</button>
       <button id="btn-elimina-ev" class="danger">Elimina aquest element</button>
@@ -854,9 +859,10 @@ async function mostraDetallEvidencia(codi) {
     const titol = document.getElementById("ed-titol").value;
     const enunciat = document.getElementById("ed-enunciat").value;
     const novTipus = document.getElementById("ed-tipus").value;
+    const requereixPromptSync = document.getElementById("ed-requereix-prompt-sync").checked;
     const msg = document.getElementById("ev-msg");
     try {
-      await api(`/api/admin/evidencies/${encodeURIComponent(codi)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ titol, enunciat, tipus: novTipus }) });
+      await api(`/api/admin/evidencies/${encodeURIComponent(codi)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ titol, enunciat, tipus: novTipus, requereixPromptSync }) });
       msg.style.color = "#1e8449";
       msg.textContent = "Desat.";
       if (novTipus !== tipus) mostraDetallEvidencia(codi);
