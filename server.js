@@ -282,7 +282,9 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      const { resultatsProves, totesOk } = executaIAvalua(codiScript, ev.proves);
+      const { resultatsProves, totesOk } = executaIAvalua(codiScript, ev.proves, {
+        requereixPromptSync: !!ev.requereixPromptSync,
+      });
 
       if (tipus === "repte") {
         const { alumne } = aplicaEntregaRepte({ estat, usuari, nom, totesOk });
@@ -469,7 +471,15 @@ const server = http.createServer(async (req, res) => {
         const totes = store.carregaEvidencies();
         if (totes[codi]) return enviaError(res, 409, `Ja existeix un element amb el codi ${codi}.`);
         const tipus = cos.tipus === "repte" ? "repte" : "evidencia";
-        totes[codi] = { codi, tipus, titol: (cos.titol || "").toString(), enunciat: (cos.enunciat || "").toString(), proves: [], ocult: false };
+        totes[codi] = {
+          codi,
+          tipus,
+          titol: (cos.titol || "").toString(),
+          enunciat: (cos.enunciat || "").toString(),
+          proves: [],
+          ocult: false,
+          requereixPromptSync: !!cos.requereixPromptSync,
+        };
         store.desaEvidencies(totes);
         return enviaJSON(res, 201, totes[codi]);
       }
@@ -482,6 +492,7 @@ const server = http.createServer(async (req, res) => {
         totes[m[1]].enunciat = (cos.enunciat ?? totes[m[1]].enunciat).toString();
         if (cos.tipus !== undefined) totes[m[1]].tipus = cos.tipus === "repte" ? "repte" : "evidencia";
         if (cos.ocult !== undefined) totes[m[1]].ocult = !!cos.ocult;
+        if (cos.requereixPromptSync !== undefined) totes[m[1]].requereixPromptSync = !!cos.requereixPromptSync;
         store.desaEvidencies(totes);
         return enviaJSON(res, 200, totes[m[1]]);
       }
